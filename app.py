@@ -1,34 +1,38 @@
+from flask import Flask, request, jsonify
+import pickle
+import numpy as np
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Load the trained model and scaler
+try:
+    with open('best_rf_model.pkl', 'rb') as model_file:
+        model = pickle.load(model_file)
+    
+    with open('scaler.pkl', 'rb') as scaler_file:
+        scaler = pickle.load(scaler_file)
+    
+    print("Model and scaler loaded successfully!")
+except Exception as e:
+    print(f"Error loading model or scaler: {e}")
+    model = None
+    scaler = None
+
+@app.route('/')
+def home():
+    return jsonify({
+        'message': 'Diabetes Prediction API is running!',
+        'status': 'success'
+    })
+
+@app.route('/predict', methods=['POST'])
+def predict():
     try:
         data = request.get_json(force=True)
         
         # Extract features in the correct order as per your training
         # Ensure the order matches the columns your model was trained on
-        features_list = [
-            data['gender'],
-            data['age'],
-            data['hypertension'],
-            data['heart_disease'],
-            data['smoking_history'],
-            data['bmi'],
-            data['HbA1c_level'],
-            data['blood_glucose_level']
-        ]
-        
-        # Convert to numpy array and reshape for a single prediction
-        features = np.array(features_list).reshape(1, -1)
-        
-        # Only scale the numeric columns that were used during training
-        # Based on your notebook: ['age', 'bmi', 'HbA1c_level', 'blood_glucose_level']
-        # These correspond to indices [1, 5, 6, 7] in your features_list
-        numeric_features = features[:, [1, 5, 6, 7]]  # age, bmi, HbA1c_level, blood_glucose_level
-        numeric_features_scaled = scaler.transform(numeric_features)
-        
-        # Reconstruct the full feature array with scaled numeric values
-        features_scaled = features.copy()
-        features_scaled[:, [1, 5, 6, 7]] = numeric_features_scaled
-        
-        # Make prediction
-        prediction = model.predict(features_scaled)[0] the order matches the columns your model was trained on
         features_list = [
             data['gender'],
             data['age'],
