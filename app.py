@@ -1,23 +1,23 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pickle
 import numpy as np
+import pandas as pd
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Load the trained model and scaler
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Load the trained pipeline model (includes preprocessing/scaling)
 try:
-    with open('best_rf_model.pkl', 'rb') as model_file:
+    with open('rf_inference.pkl', 'rb') as model_file:
         model = pickle.load(model_file)
     
-    with open('scaler.pkl', 'rb') as scaler_file:
-        scaler = pickle.load(scaler_file)
-    
-    print("Model and scaler loaded successfully!")
+    print("Model pipeline loaded successfully!")
 except Exception as e:
-    print(f"Error loading model or scaler: {e}")
+    print(f"Error loading model pipeline: {e}")
     model = None
-    scaler = None
 
 @app.route('/')
 def home():
@@ -31,38 +31,45 @@ def predict():
     try:
         data = request.get_json(force=True)
         
-        # Extract features in the correct order as per your training
-        # Ensure the order matches the columns your model was trained on
-        features_list = [
-            data['gender'],
-            data['age'],
-            data['hypertension'],
-            data['heart_disease'],
-            data['smoking_history'],
-            data['bmi'],
-            data['HbA1c_level'],
-            data['blood_glucose_level']
-        ]
+        # Create DataFrame with proper column names (same as training data)
+        # Column order must match the training data
+        features_df = pd.DataFrame({
+            'gender': [data['gender']],
+            'age': [data['age']],
+            'hypertension': [data['hypertension']],
+            'heart_disease': [data['heart_disease']],
+            'smoking_history': [data['smoking_history']],
+            'bmi': [data['bmi']],
+            'HbA1c_level': [data['HbA1c_level']],
+            'blood_glucose_level': [data['blood_glucose_level']]
+        })
         
-        # Convert to numpy array and reshape for a single prediction
-        features = np.array(features_list).reshape(1, -1)
-        
-        # Only scale the numeric columns that were used during training
-        # Based on your notebook: ['age', 'bmi', 'HbA1c_level', 'blood_glucose_level']
-        # These correspond to indices [1, 5, 6, 7] in your features_list
-        numeric_features = features[:, [1, 5, 6, 7]]  # age, bmi, HbA1c_level, blood_glucose_level
-        numeric_features_scaled = scaler.transform(numeric_features)
-        
-        # Reconstruct the full feature array with scaled numeric values
-        features_scaled = features.copy()
-        features_scaled[:, [1, 5, 6, 7]] = numeric_features_scaled
+        # Debug: print data before prediction
+        print("\n=== DATA SEBELUM PREDIKSI ===")
+        print("Input dari frontend:")
+        print(data)
+        print("\nDataFrame yang akan diprediksi:")
+        print(features_df)
+        print("=" * 50)
         
         # Make prediction
-        prediction = model.predict(features_scaled)[0]
+        prediction = model.predict(features_df)[0]
+        
+        # Get prediction probabilities
+        prediction_proba = model.predict_proba(features_df)[0]
+        
+        # prediction_proba[0] = probability of class 0 (No Diabetes)
+        # prediction_proba[1] = probability of class 1 (Diabetes)
+        no_diabetes_prob = float(prediction_proba[0]) * 100
+        diabetes_prob = float(prediction_proba[1]) * 100
         
         return jsonify({
             'prediction': int(prediction),
-            'message': 'Prediction successful'
+            'message': 'Prediction successful',
+            'probability': {
+                'no_diabetes': round(no_diabetes_prob, 2),
+                'diabetes': round(diabetes_prob, 2)
+            }
         })
         
     except KeyError as e:
@@ -82,5 +89,4 @@ def predict():
 # Render will use Gunicorn to run the app, so it won't execute this.
 if __name__ == '__main__':
     # Jalankan server agar bisa diakses dari luar (host='0.0.0.0')
-    # di port yang diharapkan oleh Hugging Face (port=7860)
     app.run(host='0.0.0.0', port=7860, debug=True)
